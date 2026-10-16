@@ -223,7 +223,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   var app = document.getElementById('app');
 
   // COS base (for live config)
-  var COS_BASE = 'https://qrmedia-1506858602.cos.ap-guangzhou.myqcloud.com';
+  var COS_BASE = 'https://qr-audio-1482662045.cos.ap-guangzhou.myqcloud.com';
 
   // ============ 工具函数 ============
   function detectType(url) {
@@ -290,9 +290,93 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   }
 
   // 压平 pdf.js 查看器：隐藏工具栏/侧栏，页面按宽度铺满（同域 iframe，手机扫码体验）
+  // 同时注入缩放控件（＋/−/重置），浮动在 PDF 右下角
+  var _pdfZoomLevel = 1.0; // 当前缩放倍数（1.0 = page-width）
+  function setPdfZoom(delta) {
+    _pdfZoomLevel = Math.max(0.25, Math.min(5, _pdfZoomLevel + delta));
+    var iframes = document.querySelectorAll('iframe[src*="pdfjs/web/viewer.html"]');
+    iframes.forEach(function(ifr) {
+      try {
+        var w = ifr.contentWindow;
+        if (w && w.PDFViewerApplication && w.PDFViewerApplication.pdfViewer) {
+          w.PDFViewerApplication.pdfViewer.currentScale = _pdfZoomLevel;
+        }
+      } catch (e) {}
+    });
+    // 更新按钮状态
+    var zi = document.getElementById('pdfZoomIn');
+    var zo = document.getElementById('pdfZoomOut');
+    if (zi) zi.style.opacity = _pdfZoomLevel >= 5 ? '0.35' : '1';
+    if (zo) zo.style.opacity = _pdfZoomLevel <= 0.25 ? '0.35' : '1';
+    // 缩放后重新计算 autoHeight
+    setTimeout(function() {
+      iframes.forEach(function(ifr) {
+        if (ifr.dataset.autoh) {
+          try {
+            var d = ifr.contentDocument;
+            if (d) {
+              var vc = d.getElementById('viewerContainer');
+              if (vc && vc.scrollHeight > 100) {
+                ifr.style.height = vc.scrollHeight + 'px';
+              }
+            }
+          } catch (e) {}
+        }
+      });
+    }, 500);
+  }
+  function resetPdfZoom() {
+    _pdfZoomLevel = 1.0;
+    var iframes = document.querySelectorAll('iframe[src*="pdfjs/web/viewer.html"]');
+    iframes.forEach(function(ifr) {
+      try {
+        var w = ifr.contentWindow;
+        if (w && w.PDFViewerApplication && w.PDFViewerApplication.pdfViewer) {
+          w.PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width';
+        }
+      } catch (e) {}
+    });
+    var zi = document.getElementById('pdfZoomIn');
+    var zo = document.getElementById('pdfZoomOut');
+    if (zi) zi.style.opacity = '1';
+    if (zo) zo.style.opacity = '1';
+    setTimeout(function() {
+      iframes.forEach(function(ifr) {
+        if (ifr.dataset.autoh) {
+          try {
+            var d = ifr.contentDocument;
+            if (d) {
+              var vc = d.getElementById('viewerContainer');
+              if (vc && vc.scrollHeight > 100) {
+                ifr.style.height = vc.scrollHeight + 'px';
+              }
+            }
+          } catch (e) {}
+        }
+      });
+    }, 500);
+  }
+  function injectPdfZoomControls() {
+    if (document.getElementById('pdfZoomBox')) return;
+    var box = document.createElement('div');
+    box.id = 'pdfZoomBox';
+    box.style.cssText = 'position:fixed;right:14px;bottom:80px;z-index:9999;display:flex;flex-direction:column;gap:6px;opacity:0.85;transition:opacity .2s';
+    box.onmouseenter = function() { box.style.opacity = '1'; };
+    box.onmouseleave = function() { box.style.opacity = '0.7'; };
+    var btnStyle = 'width:38px;height:38px;border-radius:50%;border:0;background:rgba(30,30,30,0.72);color:#fff;font-size:20px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 2px 8px rgba(0,0,0,.18);user-select:none;-webkit-tap-highlight-color:transparent;line-height:1;padding:0';
+    box.innerHTML = '<button id="pdfZoomIn" style="' + btnStyle + '" title="放大">+</button>' +
+      '<button id="pdfZoomOut" style="' + btnStyle + '" title="缩小">−</button>' +
+      '<button id="pdfZoomReset" style="' + btnStyle + ';font-size:13px;font-weight:600" title="适应宽度"></button>';
+    document.body.appendChild(box);
+    document.getElementById('pdfZoomIn').onclick = function() { setPdfZoom(0.25); };
+    document.getElementById('pdfZoomOut').onclick = function() { setPdfZoom(-0.25); };
+    document.getElementById('pdfZoomReset').onclick = function() { resetPdfZoom(); };
+  }
+
   function flattenPdfFrames() {
     var iframes = document.querySelectorAll('iframe[src*="pdfjs/web/viewer.html"]');
     if (!iframes.length) return;
+    injectPdfZoomControls();
     iframes.forEach(function(ifr) {
       if (ifr.dataset.flat) return;
       ifr.dataset.flat = '1';
