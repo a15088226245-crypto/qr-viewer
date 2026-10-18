@@ -491,7 +491,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
       return '<div class="single-audio"><div class="audio-card">' +
         '<div class="audio-icon">&#x1F3B5;</div>' +
         '<div class="audio-name">' + escapeHtml(name) + '</div>' +
-        '<audio src="' + url + '" controls autoplay preload="metadata"></audio>' +
+        '<audio src="' + url + '" controls preload="metadata" playsinline></audio>' +
         '</div></div>';
     },
 
@@ -1710,7 +1710,12 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
         });
       } else if (config.url) {
         // 单文件：COS直链，用img/video/audio标签渲染（不走CORS）
-        renderSingle(config.url, config.type || params.get('type'));
+        try {
+          renderSingle(config.url, config.type || params.get('type'));
+        } catch (e) {
+          app.className = 'error';
+          app.innerHTML = '<p>加载失败：' + escapeHtml(e.message) + '</p><button class="retry" onclick="location.reload()">重试</button>';
+        }
       } else if (config.manifest) {
         // 旧版兼容：manifest URL需要fetch（微信可能拦截）
         fetch(config.manifest).then(function(r) {
