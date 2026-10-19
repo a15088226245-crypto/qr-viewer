@@ -230,7 +230,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   var app = document.getElementById('app');
 
   // COS base (for live config)
-  var COS_BASE = 'https://qr-audio-1482662045.cos.ap-guangzhou.myqcloud.com';
+  var COS_BASE = 'https://qrmedia-1506858602.cos.ap-guangzhou.myqcloud.com';
 
   // ============ 工具函数 ============
   function detectType(url) {
@@ -1764,9 +1764,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   // ============ 活码模式 ============
   var liveId = params.get('live');
   if (liveId) {
-    var script = document.createElement('script');
-    script.src = COS_BASE + '/_live_config.js?t=' + Date.now();
-    script.onload = function() {
+    var renderLiveConfig = function() {
       if (typeof LIVE_CONFIG === 'undefined' || !LIVE_CONFIG[liveId]) {
         app.className = 'error';
         app.innerHTML = '<p>活码不存在或已被删除</p>';
@@ -1816,10 +1814,21 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
         app.innerHTML = '<p>活码配置无效</p>';
       }
     };
-    script.onerror = function() {
-      app.className = 'error';
-      app.innerHTML = '<p>加载失败，请检查网络</p><button class="retry" onclick="location.reload()">重试</button>';
+    // 优先按ID加载拆分的小配置文件（几KB，秒开）；不存在再回退全局大配置（兼容老码）
+    var loadGlobalConfig = function() {
+      var s2 = document.createElement('script');
+      s2.src = COS_BASE + '/_live_config.js?t=' + Date.now();
+      s2.onload = renderLiveConfig;
+      s2.onerror = function() {
+        app.className = 'error';
+        app.innerHTML = '<p>加载失败，请检查网络</p><button class="retry" onclick="location.reload()">重试</button>';
+      };
+      document.head.appendChild(s2);
     };
+    var script = document.createElement('script');
+    script.src = COS_BASE + '/live/' + encodeURIComponent(liveId) + '.js?t=' + Date.now();
+    script.onload = renderLiveConfig;
+    script.onerror = loadGlobalConfig;
     document.head.appendChild(script);
     return;
   }
