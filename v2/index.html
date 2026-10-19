@@ -322,6 +322,30 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
   }
 
+  // ============ 音频播放辅助 ============
+  // 安卓微信（X5内核）渲染不了原生audio标签，统一走下载引导；其它环境用自定义播放器
+  function isAndroidWeChatEnv() {
+    return /MicroMessenger/.test(navigator.userAgent) && /Android/.test(navigator.userAgent);
+  }
+
+  function audioPlayerHtml(url) {
+    if (isAndroidWeChatEnv()) {
+      return '<div style="padding:14px;background:#f8f9fa;border-radius:12px;text-align:center">' +
+        '<a href="' + url + '" download style="display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:10px 24px;border-radius:22px;text-decoration:none;font-size:14px;box-shadow:0 4px 12px rgba(102,126,234,.35)">下载后播放</a>' +
+        '<div style="font-size:11px;color:#999;margin-top:8px">安卓微信不支持在线播放，或复制链接到系统浏览器打开</div>' +
+        '</div>';
+    }
+    var audioId = 'audio_' + Math.random().toString(36).substr(2, 9);
+    return '<audio id="' + audioId + '" src="' + url + '" preload="metadata"></audio>' +
+      '<div style="text-align:center">' +
+      '<button class="audio-play-btn" onclick="toggleAudioPlay(\'' + audioId + '\')">' +
+        '<span class="play-icon">&#x25B6;</span><span class="play-text">点击播放</span>' +
+      '</button>' +
+      '<div class="audio-progress" style="display:none"><div class="audio-progress-bar"></div></div>' +
+      '<div class="audio-time" style="display:none">00:00 / 00:00</div>' +
+      '</div>';
+  }
+
   // ============ 全屏查看图片 ============
   var fsImages = [];
   var fsIndex = 0;
@@ -545,33 +569,14 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     // 单音频
     singleAudio: function(url, title) {
       var name = title || getFileName(url);
-      var audioId = 'audio_' + Math.random().toString(36).substr(2, 9);
-      // 检测安卓微信：原生audio标签在安卓微信X5内核不支持
-      var isAndroidWeChat = /MicroMessenger/.test(navigator.userAgent) && /Android/.test(navigator.userAgent);
-      if (isAndroidWeChat) {
-        // 安卓微信：显示下载引导
-        return '<div class="single-audio"><div class="audio-card">' +
-          '<div class="audio-icon">&#x1F3B5;</div>' +
-          '<div class="audio-name">' + escapeHtml(name) + '</div>' +
-          '<div style="padding:20px;background:#f8f9fa;border-radius:12px;margin-bottom:16px">' +
-            '<div style="font-size:14px;color:#666;margin-bottom:12px">安卓微信浏览器不支持在线播放</div>' +
-            '<a href="' + url + '" download style="display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:12px 28px;border-radius:25px;text-decoration:none;font-size:15px;box-shadow:0 4px 12px rgba(102,126,234,.35)">下载后播放</a>' +
-          '</div>' +
-          '<div style="font-size:12px;color:#999">或复制链接到系统浏览器打开</div>' +
-          '</div></div>';
-      }
-      // 苹果微信和其他浏览器：使用自定义播放器
-      return '<div class="single-audio"><div class="audio-card">' +
+      var h = '<div class="single-audio"><div class="audio-card">' +
         '<div class="audio-icon">&#x1F3B5;</div>' +
         '<div class="audio-name">' + escapeHtml(name) + '</div>' +
-        '<audio id="' + audioId + '" src="' + url + '" preload="metadata"></audio>' +
-        '<button class="audio-play-btn" onclick="toggleAudioPlay(\'' + audioId + '\')">' +
-          '<span class="play-icon">&#x25B6;</span><span class="play-text">点击播放</span>' +
-        '</button>' +
-        '<div class="audio-progress" style="display:none"><div class="audio-progress-bar"></div></div>' +
-        '<div class="audio-time" style="display:none">00:00 / 00:00</div>' +
-        '<a href="' + url + '" download style="display:block;margin-top:12px;font-size:13px;color:#667eea">下载音频</a>' +
-        '</div></div>';
+        audioPlayerHtml(url);
+      if (!isAndroidWeChatEnv()) {
+        h += '<a href="' + url + '" download style="display:block;margin-top:12px;font-size:13px;color:#667eea">下载音频</a>';
+      }
+      return h + '</div></div>';
     },
 
     // 单PDF
@@ -633,7 +638,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
         if (items[i].caption || items[i].title) {
           h += '<div class="audio-title">' + escapeHtml(items[i].caption || items[i].title) + '</div>';
         }
-        h += '<audio src="' + items[i].url + '" controls preload="metadata"></audio>';
+        h += audioPlayerHtml(items[i].url);
         h += '</div>';
       }
       h += '</div>';
@@ -926,7 +931,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
         var ah = '<div class="audio-list" style="padding-bottom:8px">';
         ah += '<div class="audio-item" style="border-radius:' + (item.borderRadius || 14) + 'px">';
         if (item.caption || item.title) ah += '<div class="audio-title">' + escapeHtml(item.caption || item.title) + '</div>';
-        ah += '<audio src="' + item.url + '" controls preload="metadata" style="width:100%"></audio>';
+        ah += audioPlayerHtml(item.url);
         ah += '</div></div>';
         nonImageBuffer.push(ah);
       }
@@ -1749,7 +1754,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
         } else if (t === 'video') {
           h += '<div class="video-list"><div class="video-item"><video src="' + urls[i] + '" controls preload="metadata" playsinline></video></div></div>';
         } else if (t === 'audio') {
-          h += '<div class="audio-list"><div class="audio-item"><audio src="' + urls[i] + '" controls style="width:100%"></audio></div></div>';
+          h += '<div class="audio-list"><div class="audio-item">' + audioPlayerHtml(urls[i]) + '</div></div>';
         } else if (t === 'pdf') {
           h += '<div class="doc-list"><a class="doc-item" href="' + pdfViewerUrl(urls[i]) + '" target="_blank"><div class="doc-icon pdf">&#x1F4C4;</div><div class="doc-name">' + escapeHtml(getFileName(urls[i])) + '</div><div class="doc-arrow">&#x203A;</div></a></div>';
         }
