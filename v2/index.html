@@ -1778,6 +1778,15 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
         return;
       }
       var config = LIVE_CONFIG[liveId];
+      // 试用码过期检查（试用版生成的码到期失效）
+      if (config.expire && Date.now() / 1000 > config.expire) {
+        app.className = 'error';
+        app.innerHTML = '<div style="padding:40px 20px;text-align:center">' +
+          '<div style="font-size:48px;margin-bottom:16px">&#x23F0;</div>' +
+          '<p style="font-size:16px;color:#333;margin-bottom:8px">该二维码已过有效期</p>' +
+          '<p style="font-size:13px;color:#999">请联系内容提供方更新</p></div>';
+        return;
+      }
       // 活码支持以下模式（优先级从高到低）：
       // 1. items字段 → 直接渲染组合/多媒体内容（无需fetch，微信兼容）
       // 2. url字段 → 单文件渲染（img/video/audio标签，不走CORS）
