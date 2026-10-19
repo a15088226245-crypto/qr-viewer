@@ -546,6 +546,21 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     singleAudio: function(url, title) {
       var name = title || getFileName(url);
       var audioId = 'audio_' + Math.random().toString(36).substr(2, 9);
+      // 检测安卓微信：原生audio标签在安卓微信X5内核不支持
+      var isAndroidWeChat = /MicroMessenger/.test(navigator.userAgent) && /Android/.test(navigator.userAgent);
+      if (isAndroidWeChat) {
+        // 安卓微信：显示下载引导
+        return '<div class="single-audio"><div class="audio-card">' +
+          '<div class="audio-icon">&#x1F3B5;</div>' +
+          '<div class="audio-name">' + escapeHtml(name) + '</div>' +
+          '<div style="padding:20px;background:#f8f9fa;border-radius:12px;margin-bottom:16px">' +
+            '<div style="font-size:14px;color:#666;margin-bottom:12px">安卓微信浏览器不支持在线播放</div>' +
+            '<a href="' + url + '" download style="display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:12px 28px;border-radius:25px;text-decoration:none;font-size:15px;box-shadow:0 4px 12px rgba(102,126,234,.35)">下载后播放</a>' +
+          '</div>' +
+          '<div style="font-size:12px;color:#999">或复制链接到系统浏览器打开</div>' +
+          '</div></div>';
+      }
+      // 苹果微信和其他浏览器：使用自定义播放器
       return '<div class="single-audio"><div class="audio-card">' +
         '<div class="audio-icon">&#x1F3B5;</div>' +
         '<div class="audio-name">' + escapeHtml(name) + '</div>' +
