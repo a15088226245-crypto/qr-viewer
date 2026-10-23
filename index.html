@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head><script>(function(){var q=location.search;if(/[?&]live=/.test(q)){location.replace(location.href.replace("/qr-viewer/","/qr-viewer/v2/"));}})();</script>
+<head><script>(function(){var q=location.search;if(/[?&](live|code)=/.test(q)){location.replace(location.href.replace("/qr-viewer/","/qr-viewer/v2/"));}})();</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>QR Master</title>
@@ -1762,7 +1762,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   }
 
   // ============ 活码模式 ============
-  var liveId = params.get('live');
+  var liveId = params.get('live') || params.get('code');
   if (liveId) {
     var script = document.createElement('script');
     script.src = COS_BASE + '/_live_config.js?t=' + Date.now();
