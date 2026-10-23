@@ -356,14 +356,36 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   var fsColors = [];
   var pageBg = ''; // 整页背景（全局色），点开放大时的兜底背景
 
-  // 颜色字符串 → CSS background 值（"a,b" = 渐变，"a" = 纯色）
+  // 颜色白名单：仅允许 #hex(3/4/6/8位) 或 rgba?(数字)。来自URL参数(?bg=/?colors=)的颜色
+  // 一律先过这里，不合法直接返回空串——堵死反射型XSS（S2/高-1）
+  var COLOR_RE = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$|^rgba?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(?:,\s*[\d.]+\s*)?\)$/;
+  function safeColor(c) {
+    var s = String(c || '').trim();
+    return COLOR_RE.test(s) ? s : '';
+  }
+
+  // URL净化：仅 http(s) 协议，拒绝引号/尖括号/空格——堵死 ?url= 属性逃逸（S3）
+  function safeUrl(u) {
+    var s = String(u || '').trim();
+    if (!/^https?:\/\//i.test(s)) return '';
+    if (/["'<>\s]/.test(s)) return '';
+    return s;
+  }
+
+  // 颜色字符串 → CSS background 值（"a,b" = 渐变，"a" = 纯色）；非法色返回空
+  // 注意顺序：先整体验色（rgba(102,126,234) 自带逗号，不能先split），再试渐变
   function colorCss(c) {
     if (!c) return '';
-    var parts = String(c).split(',');
+    var s = String(c);
+    var whole = safeColor(s);
+    if (whole) return whole;
+    var parts = s.split(',');
     if (parts.length > 1 && parts[1] && parts[0] !== parts[1]) {
-      return 'linear-gradient(135deg,' + parts[0] + ',' + parts[1] + ')';
+      var ga = safeColor(parts[0]), gb2 = safeColor(parts[1]);
+      if (!ga || !gb2) return '';
+      return 'linear-gradient(135deg,' + ga + ',' + gb2 + ')';
     }
-    return parts[0];
+    return '';
   }
 
   // PDF 在线查看器（pdf.js，部署在仓库根目录 pdfjs/）
@@ -555,17 +577,15 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   var Renderer = {
     // 单图片
     singleImage: function(url, title, bg) {
-      var h = '';
-      if (title) h += '<div class="page-title">' + escapeHtml(title) + '</div>';
-      h += '<div class="single-image"' + (bg ? ' style="background:' + colorCss(bg) + '"' : '') + '><img src="' + url + '" onclick="openFullscreen(this)" alt=""></div>';
-      return h;
+      // 标题只进微信顶栏(document.title)，不压在图片上
+      return '<div class="single-image"' + (bg ? ' style="background:' + colorCss(bg) + '"' : '') + '><img src="' + url + '" onclick="openFullscreen(this)" alt=""></div>';
     },
 
     // 单视频
     singleVideo: function(url, title) {
       var h = '';
       h += '<div class="single-video">';
-      h += '<video src="' + url + '" controls autoplay playsinline webkit-playsinline preload="metadata"></video>';
+      h += '<video src="' + url + '" controls playsinline webkit-playsinline preload="metadata"></video>';
       h += '</div>';
       return h;
     },
@@ -584,8 +604,8 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     // 单PDF
     singlePdf: function(url, title, allowDl) {
       // pdf.js 内嵌查看器：扫码直接看，不用下载
+      // 标题放微信顶栏(document.title)，不在PDF上方压一行大字
       var h = '<div style="position:fixed;inset:0;display:flex;flex-direction:column;background:#fff">';
-      if (title) h += '<div style="flex:none;padding:10px 16px;font-size:16px;font-weight:600;color:#222;text-align:center;border-bottom:1px solid #eee">' + escapeHtml(title) + '</div>';
       h += '<iframe src="' + pdfViewerUrl(url) + '" data-autoh="1" style="flex:1;width:100%;border:0"></iframe>';
       // 下载按钮：客户可在生成时关闭（dl=0 则不显示）
       if (allowDl !== false) h += '<div style="flex:none;text-align:center;padding:6px;font-size:12px;border-top:1px solid #eee"><a href="' + url + '" target="_blank" style="color:#667eea;text-decoration:none">下载 PDF 到本地</a></div>';
@@ -593,10 +613,9 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
       return h;
     },
 
-    // 多图画廊
+    // 多图画廊（标题只进微信顶栏）
     multiImage: function(items, title) {
       var h = '';
-      if (title) h += '<div class="page-title">' + escapeHtml(title) + '</div>';
       var n = items.length;
       var gc = n === 1 ? 'g-1' : n === 2 ? 'g-2' : n === 3 ? 'g-3' : n === 4 ? 'g-4' : 'g-many';
       h += '<div class="gallery ' + gc + '">';
@@ -615,10 +634,9 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
       return h;
     },
 
-    // 多视频
+    // 多视频（标题只进微信顶栏）
     multiVideo: function(items, title) {
       var h = '';
-      if (title) h += '<div class="page-title">' + escapeHtml(title) + '</div>';
       h += '<div class="video-list">';
       for (var i = 0; i < items.length; i++) {
         h += '<div class="video-item">';
@@ -630,10 +648,9 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
       return h;
     },
 
-    // 多音频
+    // 多音频（标题只进微信顶栏）
     multiAudio: function(items, title) {
       var h = '';
-      if (title) h += '<div class="page-title">' + escapeHtml(title) + '</div>';
       h += '<div class="audio-list">';
       for (var i = 0; i < items.length; i++) {
         h += '<div class="audio-item">';
@@ -649,8 +666,9 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
 
     // 文档列表
     docList: function(items, title) {
+      // 标题放微信顶栏(document.title)，不压在文档上
+      if (title) { try { document.title = title; } catch(e) {} }
       var h = '';
-      if (title) h += '<div class="page-title">' + escapeHtml(title) + '</div>';
       h += '<div class="doc-list">';
       for (var i = 0; i < items.length; i++) {
         var item = items[i];
@@ -720,46 +738,23 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     }
   };
 
-  // 表单提交（截图上传方式，和现有逻辑一致）
+  // 表单收集已下架（制作端不再提供表单模块），存量码如实提示，不做假成功
   window.submitQRForm = function() {
-    var form = document.getElementById('qrForm');
-    var inputs = form.querySelectorAll('input,textarea,select');
-    var ok = true;
-    inputs.forEach(function(inp) {
-      if (inp.hasAttribute('required') && !inp.value.trim()) {
-        inp.style.borderColor = '#ff4444';
-        ok = false;
-      } else {
-        inp.style.borderColor = '#ddd';
-      }
-    });
-    if (!ok) { alert('请填写所有必填项'); return; }
-    // 禁用表单
-    inputs.forEach(function(inp) { inp.disabled = true; });
-    document.querySelector('.form-submit').disabled = true;
-    document.querySelector('.form-submit').textContent = '提交中...';
-    // 如果有html2canvas则截图提交
-    if (typeof html2canvas !== 'undefined') {
-      var card = document.querySelector('.form-card');
-      html2canvas(card, {backgroundColor:'#fff', scale:2, useCORS:true}).then(function(canvas) {
-        canvas.toBlob(function(blob) {
-          // 上传截图到COS（如果有配置）
-          document.getElementById('formSuccess').style.display = '';
-          document.querySelector('.form-submit').textContent = '已提交';
-        }, 'image/png');
-      }).catch(function() {
-        document.getElementById('formSuccess').style.display = '';
-        document.querySelector('.form-submit').textContent = '已提交';
-      });
-    } else {
-      document.getElementById('formSuccess').style.display = '';
-      document.querySelector('.form-submit').textContent = '已提交';
-    }
+    alert('该表单的收集功能已暂停，填写内容不会被保存，请直接联系发布者');
   };
 
-  // ============ 多步骤表单导航 ============
+  // ============ 多步骤表单导航（状态从DOM推导，不依赖注入的script——innerHTML里的script不执行） ============
+  function _formStepState() {
+    var contents = document.querySelectorAll('.step-content');
+    var cur = 0;
+    for (var i = 0; i < contents.length; i++) { if (contents[i].classList.contains('active')) { cur = i; break; } }
+    return { cur: cur, total: contents.length };
+  };
+
   window.formStepNext = function() {
-    if (typeof currentStep === 'undefined') return;
+    var st = _formStepState();
+    if (!st.total) return;
+    var currentStep = st.cur, totalSteps = st.total;
     // 验证当前步骤的必填字段
     var currentContent = document.getElementById('stepContent' + currentStep);
     var requiredInputs = currentContent.querySelectorAll('[required]');
@@ -771,13 +766,13 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
         return;
       }
     }
+    // 最后一步 = 提交
+    if (currentStep === totalSteps - 1) { submitQRForm(); return; }
     // 隐藏当前步骤
     document.getElementById('stepContent' + currentStep).classList.remove('active');
     document.getElementById('stepDot' + currentStep).classList.remove('active');
     document.getElementById('stepDot' + currentStep).classList.add('done');
-    if (currentStep < totalSteps - 1) {
-      document.getElementById('stepLine' + (currentStep + 1)).classList.add('done');
-    }
+    document.getElementById('stepLine' + (currentStep + 1)).classList.add('done');
     currentStep++;
     // 显示下一步骤
     document.getElementById('stepContent' + currentStep).classList.add('active');
@@ -792,7 +787,10 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   };
 
   window.formStepPrev = function() {
-    if (typeof currentStep === 'undefined' || currentStep === 0) return;
+    var st = _formStepState();
+    if (!st.total) return;
+    var currentStep = st.cur, totalSteps = st.total;
+    if (currentStep === 0) return;
     document.getElementById('stepContent' + currentStep).classList.remove('active');
     document.getElementById('stepDot' + currentStep).classList.remove('active');
     currentStep--;
@@ -865,13 +863,20 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   function renderManifest(data) {
     var h = '';
     var title = data.title || '';
+    // 微信顶栏同步显示标题
+    if (title) { try { document.title = title; } catch(e) {} }
     var titleStyle = data.titleStyle || {};
     var bg = data.bg || data.backgroundColor || '#f5f7fa';
-    document.body.style.background = colorCss(bg) || bg;
-    pageBg = bg;
+    var bgCss = colorCss(bg);
+    if (bgCss) document.body.style.background = bgCss;
+    pageBg = bgCss || '#f5f7fa';
 
     // 标题渲染（支持样式）
-    if (title) {
+    // 纯媒体/文档内容（全是图片/视频/音频/PDF/Office）不在页面上压标题——标题已在微信顶栏
+    var allDocs = data.items && data.items.length > 0 && data.items.every(function(it) {
+      return it.type === 'pdf' || it.type === 'office' || it.type === 'image' || it.type === 'video' || it.type === 'audio';
+    });
+    if (title && !allDocs) {
       var ts = 'text-align:' + (titleStyle.textAlign || 'center') + ';padding:20px 16px 8px;word-break:break-word;';
       if (titleStyle.fontSize) ts += 'font-size:' + titleStyle.fontSize + 'px;';
       else ts += 'font-size:20px;';
@@ -1142,7 +1147,6 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
       h += '<button class="step-next" id="stepNext" onclick="formStepNext()">下一步</button>';
       h += '</div>';
       h += '<div class="form-success" id="formSuccess" style="display:none">提交成功!</div>';
-      h += '<script>var currentStep=0;var totalSteps=' + steps.length + ';<\/script>';
     } else {
       // 普通单步表单
       h += '<form id="qrForm" onsubmit="return false">';
@@ -1577,8 +1581,8 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     h += '</div>';
     if (buyUrl || contactUrl) {
       h += '<div class="product-actions">';
-      if (contactUrl) h += '<button class="contact-btn" onclick="window.location.href=\'' + contactUrl + '\'">联系客服</button>';
-      if (buyUrl) h += '<button class="buy-btn" onclick="window.location.href=\'' + buyUrl + '\'">立即购买</button>';
+      if (contactUrl) h += '<button class="contact-btn" data-goto="' + escapeHtml(contactUrl) + '" onclick="window.location.href=this.getAttribute(\'data-goto\')">联系客服</button>';
+      if (buyUrl) h += '<button class="buy-btn" data-goto="' + escapeHtml(buyUrl) + '" onclick="window.location.href=this.getAttribute(\'data-goto\')">立即购买</button>';
       h += '</div>';
     }
     h += '</div>';
@@ -1606,10 +1610,12 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     h += '</div>';
     if (desc) h += '<div class="event-desc">' + escapeHtml(desc).replace(/\n/g, '<br>') + '</div>';
 
-    // 倒计时（如果有日期）
+    // 倒计时（如果有日期；日期格式非法时跳过倒计时，不能让它炸掉整个渲染）
     if (date) {
-      var targetDate = new Date(date).toISOString();
-      h += renderCountdown({target: targetDate, title: '距离活动开始'});
+      var _d = new Date(date);
+      if (!isNaN(_d.getTime())) {
+        h += renderCountdown({target: _d.toISOString(), title: '距离活动开始'});
+      }
     }
 
     // 地图
@@ -1675,6 +1681,8 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   function renderSingle(mediaUrl, forceType) {
     var type = forceType || detectType(mediaUrl);
     var title = params.get('title') || '';
+    // 有标题就放到微信顶栏显示（原本固定显示 QR Master）
+    if (title) { try { document.title = title; } catch(e) {} }
     var bg = params.get('bg') || '';
     if (bg) { pageBg = bg; document.body.style.background = colorCss(bg); }
     var h = '';
@@ -1688,10 +1696,9 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     } else if (type === 'pdf') {
       h = Renderer.singlePdf(mediaUrl, title, params.get('dl') !== '0');
     } else if (type === 'office') {
-      // Office文件 → Microsoft Online Viewer
+      // Office文件 → Microsoft Online Viewer（标题已在顶栏，不再压一行大字）
       var officeLink = 'https://view.officeapps.live.com/op/view.aspx?src=' + encodeURIComponent(mediaUrl);
       h = '<div class="doc-list" style="padding-top:40px">';
-      if (title) h += '<div class="page-title">' + escapeHtml(title) + '</div>';
       h += '<a class="doc-item" href="' + officeLink + '" target="_blank">';
       h += '<div class="doc-icon doc">&#x1F4C3;</div>';
       h += '<div class="doc-name">' + escapeHtml(getFileName(mediaUrl)) + '</div>';
@@ -1699,19 +1706,24 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
       h += '<div style="text-align:center;margin-top:16px"><a href="' + mediaUrl + '" style="color:#667eea;font-size:13px">下载原文件</a></div>';
       h += '</div>';
     } else if (type === 'html') {
-      // HTML页面 → fetch + document.write
-      app.innerHTML = '<div class="loading">加载中...</div>';
-      fetch(mediaUrl).then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.text();
-      }).then(function(htmlContent) {
-        document.open();
-        document.write(htmlContent);
-        document.close();
-      }).catch(function(err) {
-        // CORS失败 → 直接跳转到COS URL
+      // HTML页面：仅同源内容可内嵌渲染；外域一律跳转（地址栏可见真实域名，防官方域名钓鱼）
+      var sameOrigin = false;
+      try { sameOrigin = new URL(mediaUrl, location.href).origin === location.origin; } catch(e) {}
+      if (sameOrigin) {
+        app.innerHTML = '<div class="loading">加载中...</div>';
+        fetch(mediaUrl).then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.text();
+        }).then(function(htmlContent) {
+          document.open();
+          document.write(htmlContent);
+          document.close();
+        }).catch(function(err) {
+          window.location.href = mediaUrl;
+        });
+      } else {
         window.location.href = mediaUrl;
-      });
+      }
       return;
     } else {
       // 未知类型 → 文件卡片
@@ -1746,9 +1758,8 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     } else if (type === 'audio') {
       h = Renderer.multiAudio(items, title);
     } else {
-      // 混合类型 → 逐个渲染
+      // 混合类型 → 逐个渲染（标题只进微信顶栏）
       h = '';
-      if (title) h += '<div class="page-title">' + escapeHtml(title) + '</div>';
       for (var i = 0; i < urls.length; i++) {
         var t = detectType(urls[i]);
         if (t === 'image') {
@@ -1768,23 +1779,82 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     flattenPdfFrames();
   }
 
+  // ============ 流量闸门：制作者流量用完则暂停展示（无 traffic 档案 = 老客户/定制版 = 不限） ============
+  function extractCid(u) {
+    // 不写死域名：按路径 /c/{cid}/ 提取，兼容COS源站、CDN自有域名及未来定制客户域名
+    var m = /\/c\/([0-9a-zA-Z]+)\//.exec(u || '');
+    return m ? m[1] : null;
+  }
+  function collectItemUrls(items) {
+    var out = [];
+    (items || []).forEach(function(it) {
+      if (!it) return;
+      if (it.url) out.push(it.url);
+      if (it.urls) out.push.apply(out, it.urls);
+    });
+    return out;
+  }
+  function showTrafficGate() {
+    app.className = 'error';
+    try { document.title = '内容暂时无法查看'; } catch (e) {}
+    app.innerHTML = '<div style="padding:70px 24px;text-align:center">' +
+      '<p style="font-size:17px;color:#333;font-weight:600;margin-bottom:10px">内容暂时无法查看</p>' +
+      '<p style="font-size:13px;color:#999;line-height:1.8">制作者正在维护中，请稍后再试<br>或联系分享这个二维码给你的人</p></div>';
+  }
+  function showExpired() {
+    app.className = 'error';
+    try { document.title = '二维码已过有效期'; } catch (e) {}
+    app.innerHTML = '<div style="padding:40px 20px;text-align:center">' +
+      '<div style="font-size:48px;margin-bottom:16px">&#x23F0;</div>' +
+      '<p style="font-size:16px;color:#333;margin-bottom:8px">该二维码已过有效期</p>' +
+      '<p style="font-size:13px;color:#999">请联系内容提供方更新</p></div>';
+  }
+  // 统一有效期检查：任何模式（manifest/多URL/单URL/活码）带 exp 参数且已过期 → 失效页
+  var _expTs = +(params.get('exp') || 0);
+  if (_expTs && Date.now() / 1000 > _expTs) { showExpired(); return; }
+  // 任一 URL 属于某客户即检查该客户流量；脚本超时/404/跨域失败一律放行（不误伤）
+  function trafficGate(urls, proceed) {
+    proceed(); return; /* 定制版(静)：流量不限，不记账不拦截 */
+    var cid = null;
+    for (var i = 0; i < urls.length && !cid; i++) cid = extractCid(urls[i]);
+    if (!cid) { proceed(); return; }
+    var done = false;
+    var finish = function(blocked) { if (done) return; done = true; if (blocked) showTrafficGate(); else proceed(); };
+    var timer = setTimeout(function() { finish(false); }, 4000);
+    var s = document.createElement('script');
+    s.src = COS_BASE + '/traffic/' + encodeURIComponent(cid) + '.js?t=' + Date.now();
+    s.onload = function() {
+      clearTimeout(timer);
+      var t = window.QRM_TRAFFIC;
+      finish(!!(t && t.cid === cid && (+(t.balance) - +(t.used)) <= 0));
+    };
+    s.onerror = function() { clearTimeout(timer); finish(false); };
+    document.head.appendChild(s);
+  }
+
   // ============ 活码模式 ============
-  var liveId = params.get('live');
+  // 活码参数名用 code（COS/CDN 静态网站把 "live" 当作保留参数会返回 405）；
+  // 同时兼容旧链接上的 live 参数（github.io 老码仍在用）
+  var liveId = params.get('code') || params.get('live');
   if (liveId) {
+    var triedGlobal = false;
+    var liveLoadTimer = null;
     var renderLiveConfig = function() {
       if (typeof LIVE_CONFIG === 'undefined' || !LIVE_CONFIG[liveId]) {
+        // 拆分小文件里没有该id时，回退全局大配置再找一次（拆分上传失败/延迟的兜底）
+        if (!triedGlobal) { triedGlobal = true; loadGlobalConfig(); return; }
+        clearTimeout(liveLoadTimer);
         app.className = 'error';
         app.innerHTML = '<p>活码不存在或已被删除</p>';
         return;
       }
+      clearTimeout(liveLoadTimer);
       var config = LIVE_CONFIG[liveId];
+      // 活码标题放微信顶栏
+      if (config.title) { try { document.title = config.title; } catch(e) {} }
       // 试用码过期检查（试用版生成的码到期失效）
       if (config.expire && Date.now() / 1000 > config.expire) {
-        app.className = 'error';
-        app.innerHTML = '<div style="padding:40px 20px;text-align:center">' +
-          '<div style="font-size:48px;margin-bottom:16px">&#x23F0;</div>' +
-          '<p style="font-size:16px;color:#333;margin-bottom:8px">该二维码已过有效期</p>' +
-          '<p style="font-size:13px;color:#999">请联系内容提供方更新</p></div>';
+        showExpired();
         return;
       }
       // 活码支持以下模式（优先级从高到低）：
@@ -1792,6 +1862,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
       // 2. url字段 → 单文件渲染（img/video/audio标签，不走CORS）
       // 3. manifest字段 → 旧版兼容（需fetch，可能微信不兼容）
       // 4. urls字段 → 旧版多URL
+      var _dispatchLive = function() {
       if (config.items && config.items.length > 0) {
         // 新格式：items直接存在config里，无需fetch（微信兼容）
         renderManifest({
@@ -1829,13 +1900,21 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
         app.className = 'error';
         app.innerHTML = '<p>活码配置无效</p>';
       }
+      };
+      trafficGate(config.items ? collectItemUrls(config.items) : (config.url ? [config.url] : (config.urls || (config.manifest ? [config.manifest] : []))), _dispatchLive);
     };
     // 优先按ID加载拆分的小配置文件（几KB，秒开）；不存在再回退全局大配置（兼容老码）
+    // 10秒无响应给重试入口（COS挂起时onerror不一定触发）
+    liveLoadTimer = setTimeout(function() {
+      app.className = 'error';
+      app.innerHTML = '<p>加载超时，请检查网络</p><button class="retry" onclick="location.reload()">重试</button>';
+    }, 10000);
     var loadGlobalConfig = function() {
       var s2 = document.createElement('script');
       s2.src = COS_BASE + '/_live_config.js?t=' + Date.now();
       s2.onload = renderLiveConfig;
       s2.onerror = function() {
+        clearTimeout(liveLoadTimer);
         app.className = 'error';
         app.innerHTML = '<p>加载失败，请检查网络</p><button class="retry" onclick="location.reload()">重试</button>';
       };
@@ -1852,14 +1931,18 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   // ============ Manifest 模式 ============
   var manifestUrl = params.get('manifest');
   if (manifestUrl) {
+    trafficGate([manifestUrl], function() {
     fetch(manifestUrl).then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function(data) {
+      // manifest 自带 expire 字段（试用静态清单）→ 失效页
+      if (data && data.expire && Date.now() / 1000 > data.expire) { showExpired(); return; }
       renderManifest(data);
     }).catch(function(err) {
       app.className = 'error';
       app.innerHTML = '<p>加载失败</p><p style="font-size:12px;color:#bbb">' + err.message + '</p><button class="retry" onclick="location.reload()">重试</button>';
+    });
     });
     return;
   }
@@ -1867,7 +1950,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
   // ============ 多URL模式（管道分隔） ============
   var multiUrls = params.get('urls');
   if (multiUrls) {
-    var urls = multiUrls.split('|');
+    var urls = multiUrls.split('|').map(safeUrl).filter(Boolean);
     var type = params.get('type') || 'auto';
     var title = params.get('title') || '';
     var bgParam = params.get('bg') || '';
@@ -1876,14 +1959,14 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
     if (type === 'auto' && urls.length > 0) {
       type = detectType(urls[0]); // 用第一个URL推断类型
     }
-    renderMultiUrls(urls, type, title, colorsParam);
+    trafficGate(urls, function() { renderMultiUrls(urls, type, title, colorsParam); });
     return;
   }
 
   // ============ 单URL模式（向后兼容） ============
-  var mediaUrl = params.get('url');
+  var mediaUrl = safeUrl(params.get('url'));
   if (mediaUrl) {
-    renderSingle(mediaUrl, params.get('type'));
+    trafficGate([mediaUrl], function() { renderSingle(mediaUrl, params.get('type')); });
     return;
   }
 
